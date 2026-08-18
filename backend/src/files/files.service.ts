@@ -18,8 +18,8 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
   'text/plain',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'text/csv',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'image/png',
@@ -37,37 +37,55 @@ export class FilesService {
     private readonly users: Repository<User>,
   ) {}
 
-  async uploadFile(file: Express.Multer.File, userId: string) {
+  async uploadFile(
+    file: Express.Multer.File,
+    userId: string,
+  ) {
     if (!file) {
-      throw new BadRequestException('A file is required.');
+      throw new BadRequestException(
+        'A file is required.',
+      );
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      throw new BadRequestException('File size must be 10 MB or less.');
+      throw new BadRequestException(
+        'File size must be 10 MB or less.',
+      );
     }
 
-    const sanitizedOriginalName = this.sanitizeOriginalName(
-      file.originalname,
-    );
+    const sanitizedOriginalName =
+      this.sanitizeOriginalName(
+        file.originalname,
+      );
 
-    const mimeType = this.normalizeMimeType(
-      file.mimetype,
-      sanitizedOriginalName,
-    );
+    const mimeType =
+      this.normalizeMimeType(
+        file.mimetype,
+        sanitizedOriginalName,
+      );
 
     if (!ALLOWED_MIME_TYPES.has(mimeType)) {
-      throw new BadRequestException('Unsupported file type.');
+      throw new BadRequestException(
+        'Unsupported file type.',
+      );
     }
 
     const user = await this.users.findOne({
-      where: { id: userId },
+      where: {
+        id: userId,
+      },
     });
 
     if (!user) {
-      throw new NotFoundException('User not found.');
+      throw new NotFoundException(
+        'User not found.',
+      );
     }
 
-    const safeName = this.createSafeFilename(sanitizedOriginalName);
+    const safeName =
+      this.createSafeFilename(
+        sanitizedOriginalName,
+      );
 
     const userFolder = path.join(
       process.cwd(),
@@ -75,31 +93,50 @@ export class FilesService {
       user.id,
     );
 
-    await fs.mkdir(userFolder, { recursive: true });
+    await fs.mkdir(userFolder, {
+      recursive: true,
+    });
 
-    const absolutePath = path.join(userFolder, safeName);
+    const absolutePath = path.join(
+      userFolder,
+      safeName,
+    );
 
     const relativePath = path
-      .relative(process.cwd(), absolutePath)
+      .relative(
+        process.cwd(),
+        absolutePath,
+      )
       .replace(/\\/g, '/');
+
+    if (!file.path) {
+      throw new BadRequestException(
+        'Uploaded file path is missing.',
+      );
+    }
+
+    const uploadedBuffer =
+      await fs.readFile(file.path);
 
     await fs.writeFile(
       absolutePath,
-      await fs.readFile(file.path),
-      'binary',
+      uploadedBuffer,
     );
 
-    const saved = this.uploadedFiles.create({
-      name: safeName,
-      originalName: sanitizedOriginalName,
-      mimeType,
-      size: file.size,
-      relativePath,
-      status: 'uploaded',
-      user,
-    });
+    const saved =
+      this.uploadedFiles.create({
+        name: safeName,
+        originalName:
+          sanitizedOriginalName,
+        mimeType: mimeType,
+        size: file.size,
+        relativePath: relativePath,
+        status: 'uploaded',
+        user: user,
+      });
 
-    const entity = await this.uploadedFiles.save(saved);
+    const entity =
+      await this.uploadedFiles.save(saved);
 
     return {
       id: entity.id,
@@ -110,21 +147,27 @@ export class FilesService {
     };
   }
 
-  async findForUser(fileId: string, userId: string) {
-    const file = await this.uploadedFiles.findOne({
-      where: {
-        id: fileId,
-        user: {
-          id: userId,
+  async findForUser(
+    fileId: string,
+    userId: string,
+  ) {
+    const file =
+      await this.uploadedFiles.findOne({
+        where: {
+          id: fileId,
+          user: {
+            id: userId,
+          },
         },
-      },
-      relations: {
-        user: true,
-      },
-    });
+        relations: {
+          user: true,
+        },
+      });
 
     if (!file) {
-      throw new NotFoundException('File not found.');
+      throw new NotFoundException(
+        'File not found.',
+      );
     }
 
     return file;
@@ -142,10 +185,11 @@ export class FilesService {
       return null;
     }
 
-    const file = await this.findForUser(
-      attachment.id,
-      userId,
-    );
+    const file =
+      await this.findForUser(
+        attachment.id,
+        userId,
+      );
 
     if (file.mimeType.startsWith('image/')) {
       throw new BadRequestException(
@@ -153,7 +197,8 @@ export class FilesService {
       );
     }
 
-    const extractedText = await this.extractText(file);
+    const extractedText =
+      await this.extractText(file);
 
     if (!extractedText) {
       throw new BadRequestException(
@@ -161,23 +206,34 @@ export class FilesService {
       );
     }
 
-    const trimmedText = extractedText
-      .slice(0, 9000)
-      .trim();
+    const trimmedText =
+      extractedText
+        .slice(0, 9000)
+        .trim();
 
-    return `Attached file: "${file.originalName}"\n\nExtracted text:\n${trimmedText}`;
+    return (
+      'Attached file: "' +
+      file.originalName +
+      '"\n\n' +
+      'Extracted text:\n' +
+      trimmedText
+    );
   }
 
-  async extractText(file: UploadedFile) {
-    const absolutePath = path.resolve(
-      process.cwd(),
-      file.relativePath,
-    );
+  async extractText(
+    file: UploadedFile,
+  ) {
+    const absolutePath =
+      path.resolve(
+        process.cwd(),
+        file.relativePath,
+      );
 
-    const relative = path.relative(
-      process.cwd(),
-      absolutePath,
-    );
+    const relative =
+      path.relative(
+        process.cwd(),
+        absolutePath,
+      );
 
     if (
       relative.startsWith('..') ||
@@ -188,38 +244,53 @@ export class FilesService {
       );
     }
 
-    const buffer = await fs.readFile(absolutePath);
+    const buffer =
+      await fs.readFile(
+        absolutePath,
+      );
+
+    const fileName =
+      file.name.toLowerCase();
 
     /*
-     * Plain text / CSV
+     * TXT / CSV
      */
     if (
       file.mimeType === 'text/plain' ||
-      file.name.toLowerCase().endsWith('.txt') ||
-      file.name.toLowerCase().endsWith('.csv')
+      file.mimeType === 'text/csv' ||
+      fileName.endsWith('.txt') ||
+      fileName.endsWith('.csv')
     ) {
-      return buffer.toString('utf-8');
+      return buffer.toString(
+        'utf-8',
+      );
     }
 
     /*
      * PDF
      *
-     * pdf-parse is loaded lazily here instead of at application
-     * startup. This prevents Vercel from crashing while importing
-     * the PDF rendering dependencies during function initialization.
+     * pdf-parse is loaded only when
+     * a PDF is actually being processed.
      */
     if (
-      file.mimeType === 'application/pdf' ||
-      file.name.toLowerCase().endsWith('.pdf')
+      file.mimeType ===
+        'application/pdf' ||
+      fileName.endsWith('.pdf')
     ) {
-      const { PDFParse } = await import('pdf-parse');
+      const pdfModule =
+        await import('pdf-parse');
 
-      const parser = new PDFParse({
-        data: buffer,
-      });
+      const PDFParse =
+        pdfModule.PDFParse;
+
+      const parser =
+        new PDFParse({
+          data: buffer,
+        });
 
       try {
-        const result = await parser.getText();
+        const result =
+          await parser.getText();
 
         return result.text || '';
       } finally {
@@ -233,47 +304,63 @@ export class FilesService {
     if (
       file.mimeType ===
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      file.name.toLowerCase().endsWith('.docx')
+      fileName.endsWith('.docx')
     ) {
-      const result = await mammoth.extractRawText({
-        buffer,
-      });
+      const result =
+        await mammoth.extractRawText({
+          buffer: buffer,
+        });
 
       return result.value || '';
     }
 
     /*
-     * Excel / XLSX / XLS
+     * Excel
      */
     if (
-      file.mimeType === 'application/vnd.ms-excel' ||
+      file.mimeType ===
+        'application/vnd.ms-excel' ||
       file.mimeType ===
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-      file.name.toLowerCase().endsWith('.xlsx') ||
-      file.name.toLowerCase().endsWith('.xls')
+      fileName.endsWith('.xlsx') ||
+      fileName.endsWith('.xls')
     ) {
-      const workbook = XLSX.read(buffer, {
-        type: 'buffer',
-      });
+      const workbook =
+        XLSX.read(buffer, {
+          type: 'buffer',
+        });
 
       const rows: string[] = [];
 
-      for (const sheetName of workbook.SheetNames) {
-        const worksheet = workbook.Sheets[sheetName];
+      for (
+        const sheetName
+        of workbook.SheetNames
+      ) {
+        const worksheet =
+          workbook.Sheets[
+            sheetName
+          ];
 
-        const json = XLSX.utils.sheet_to_json<
-          Record<string, unknown>
-        >(worksheet, {
-          raw: false,
-          defval: '',
-        });
+        const json =
+          XLSX.utils.sheet_to_json<
+            Record<string, unknown>
+          >(
+            worksheet,
+            {
+              raw: false,
+              defval: '',
+            },
+          );
 
         rows.push(
-          `Sheet: ${sheetName}\n${JSON.stringify(
-            json.slice(0, 20),
-            null,
-            2,
-          )}`,
+          'Sheet: ' +
+            sheetName +
+            '\n' +
+            JSON.stringify(
+              json.slice(0, 20),
+              null,
+              2,
+            ),
         );
       }
 
@@ -283,11 +370,14 @@ export class FilesService {
     return null;
   }
 
-  private sanitizeOriginalName(originalName: string) {
+  private sanitizeOriginalName(
+    originalName: string,
+  ) {
     return (
       originalName
         .replace(/[\\/]+/g, '')
-        .trim() || 'upload'
+        .trim() ||
+      'upload'
     );
   }
 
@@ -295,42 +385,87 @@ export class FilesService {
     mimeType: string,
     originalName: string,
   ) {
-    const value = mimeType.toLowerCase();
+    const value =
+      mimeType.toLowerCase();
 
-    const ext = path
-      .extname(originalName)
-      .toLowerCase();
+    const ext =
+      path
+        .extname(originalName)
+        .toLowerCase();
 
-    const map: Record<string, string> = {
-      '.pdf': 'application/pdf',
-      '.txt': 'text/plain',
-      '.csv': 'text/csv',
+    const map: Record<
+      string,
+      string
+    > = {
+      '.pdf':
+        'application/pdf',
+
+      '.txt':
+        'text/plain',
+
+      '.csv':
+        'text/csv',
+
       '.docx':
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+
       '.xlsx':
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      '.xls': 'application/vnd.ms-excel',
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.webp': 'image/webp',
+
+      '.xls':
+        'application/vnd.ms-excel',
+
+      '.png':
+        'image/png',
+
+      '.jpg':
+        'image/jpeg',
+
+      '.jpeg':
+        'image/jpeg',
+
+      '.webp':
+        'image/webp',
     };
 
-    return map[ext] || value;
+    return (
+      map[ext] || value
+    );
   }
 
-  private createSafeFilename(fileName: string) {
-    const ext = path
-      .extname(fileName)
-      .toLowerCase();
+  private createSafeFilename(
+    fileName: string,
+  ) {
+    const ext =
+      path
+        .extname(fileName)
+        .toLowerCase();
 
     const safeBase =
       path
-        .basename(fileName, ext)
-        .replace(/[^a-zA-Z0-9._-]+/g, '-')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '') || 'document';
+        .basename(
+          fileName,
+          ext,
+        )
+        .replace(
+          /[^a-zA-Z0-9._-]+/g,
+          '-',
+        )
+        .replace(
+          /-+/g,
+          '-',
+        )
+        .replace(
+          /^-|-$/g,
+          '',
+        ) ||
+      'document';
 
-    return `${Date.now()}-${safeBase}${ext}`;
+    return (
+      Date.now() +
+      '-' +
+      safeBase +
+      ext
+    );
   }
 }
